@@ -1,0 +1,14 @@
+[project]
+name = "hyperspec"
+authors = [{ name = "Simon Mutch", email = "smutch@unimelb.edu.au" }]
+license = "Apache-2.0" 
+version = "0.1.0"
+description = "Tools for hyperspectral image processing"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.2.2",
+    "opencv-python>=4.11.0.86",
+    "spectral>=0.23.1",
+    "xarray>=2025.1.2",
+]
