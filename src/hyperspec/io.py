@@ -25,23 +25,24 @@ def read_specim_manifest(path: Path | str) -> dict[str, dict[str, str]]:
     return result
 
 
-def read_specim(path: Path | str, item: str) -> List[xr.DataArray] | xr.DataArray:
+def read_specim(path: Path | str, item: str) -> xr.Dataset | xr.DataArray:
     path = Path(path)
     manifest = read_specim_manifest(path / "manifest.xml")
     if item not in manifest.keys():
         _err = f"Item {item} not found in manifest. Avilable items: {list(manifest.keys())}"
         raise KeyError(_err)
 
-    result = []
+    result = xr.Dataset()
     item_dict = manifest[item]
     for key, value in item_dict.items():
         if key == "hdr":
-            result.append(read_cube(path / value))
+            result["cube"] = read_cube(path / value)
         elif key == "png":
-            result.append(read_png(path / value))
+            result[key] = read_png(path / value)
 
-    if len(result) == 1:
-        result = result[0]
+    data_vals = list(result.data_vars)
+    if len(data_vals) == 1:
+        result = result[data_vals[0]]
 
     return result
 
