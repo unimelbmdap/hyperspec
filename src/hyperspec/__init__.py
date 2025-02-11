@@ -1,3 +1,3 @@
-from .io import read_cube, read_preview
+from .io import read_specim, read_specim_manifest
 
-__all__ = ["read_cube", "read_preview"]
+__all__ = ["read_specim", "read_specim_manifest"]
