@@ -7,7 +7,7 @@ description = "Tools for hyperspectral image processing"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "numpy>=2.2.2",
+    "numpy>=2.0",
     "opencv-python>=4.11.0.86",
     "scikit-learn>=1.6.1",
     "spectral>=0.23.1",
