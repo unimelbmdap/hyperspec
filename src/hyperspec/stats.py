@@ -2,6 +2,7 @@ import numpy as np
 import xarray as xr
 from sklearn import decomposition as decomp
 from sklearn.preprocessing import StandardScaler
+from dataclasses import dataclass
 
 __all__ = ["pca", "cube_to_features", "features_to_cube"]
 
@@ -24,14 +25,16 @@ def cube_to_features(cube: xr.DataArray) -> np.ndarray:
 
 
 def features_to_cube(
-    features: np.ndarray, cube: xr.DataArray, name: str
+    features: np.ndarray,
+    cube: xr.DataArray | xr.core.coordinates.DataArrayCoordinates,  # type: ignore
+    name: str,
 ) -> xr.DataArray:
     """
     Converts a feature array into an xarray DataArray with specified dimensions and coordinates.
 
     Args:
         features: The feature array to be reshaped and converted.
-        cube: The reference DataArray providing shape and coordinate information.
+        cube: The reference DataArray or coords providing shape and coordinate information.
         name: The name for the new dimension in the resulting DataArray.
 
     Returns:
@@ -40,17 +43,23 @@ def features_to_cube(
     Raises:
         ValueError: If the number of dimensions in features is not 1 or 2.
     """
+
+    if isinstance(cube, xr.core.coordinates.DataArrayCoordinates):
+        shape = [cube[d].size for d in cube.dims]
+    else:
+        shape = cube.shape
+
     if features.ndim == 2:
         return xr.DataArray(
-            features.reshape((*cube.shape[:2], -1)),
+            features.reshape((*shape[:2], -1)),
             dims=[*cube.dims[:2], name],
-            coords={"y": cube.y, "x": cube.x, name: range(features.shape[-1])},
+            coords={"y": cube["y"], "x": cube["x"], name: range(features.shape[-1])},
         )
     elif features.ndim == 1:
         return xr.DataArray(
-            features.reshape(cube.shape[:2]),
+            features.reshape(shape[:2]),
             dims=cube.dims[:2],
-            coords={"y": cube.y, "x": cube.x},
+            coords={"y": cube["y"], "x": cube["x"]},
         )
     else:
         raise ValueError(f"Invalid number of dimensions: {features.ndim}")
@@ -107,7 +116,8 @@ def pca(
     return result, model
 
 
-def mnf(cube: xr.DataArray, n_components: int | float | None = None) -> xr.Dataset:
+@dataclass
+class MNF:
     """Performs Minimum Noise Fraction (MNF) transformation on a DataArray.
 
     The methodology follows the Noise-Adjusted Principal Components (NAPC)
@@ -115,44 +125,71 @@ def mnf(cube: xr.DataArray, n_components: int | float | None = None) -> xr.Datas
 
     The noise is estimated from the differences between adjacent pixels in the
     horizontal and vertical directions.
+    Data class for Minimum Noise Fraction (MNF) transformation parameters.
 
-    Args:
-        cube: Input DataArray with dimensions (y, x).
-        n_components: Number of components to keep. If None, all components are kept.
-            If float between 0 and 1, selects components explaining that proportion
-            of variance.
+    Citation
+    --------
 
-    Returns:
-        Dataset containing the MNF transformed components.
-
-    Citations:
-        Roger, R.E. “A Faster Way to Compute the Noise-Adjusted Principal
-        Components Transform Matrix.” IEEE Transactions on Geoscience and
-        Remote Sensing 32, no. 6 (November 1994): 1194–96.
-        https://doi.org/10.1109/36.338369.
+    Roger, R.E. “A Faster Way to Compute the Noise-Adjusted Principal
+    Components Transform Matrix.” IEEE Transactions on Geoscience and
+    Remote Sensing 32, no. 6 (November 1994): 1194–96.
+    https://doi.org/10.1109/36.338369.
     """
-    noise_cov = (
-        np.cov(
-            xr.concat(
-                [
-                    cube.diff("y").stack(v=("y", "x")),
-                    cube.diff("x").stack(v=("y", "x")),
-                ],
-                "v",
-            ),
-            rowvar=True,
+
+    n_components: int | float | None = None
+
+    def fit_transform(self, cube: xr.DataArray) -> xr.Dataset:
+        """Fits the MNF transformation to the provided DataArray."""
+        noise_cov = (
+            np.cov(
+                xr.concat(
+                    [
+                        cube.diff("y").stack(v=("y", "x")),
+                        cube.diff("x").stack(v=("y", "x")),
+                    ],
+                    "v",
+                ),
+                rowvar=True,
+            )
+            / 2.0
         )
-        / 2.0
-    )
 
-    eigvals, eigvecs = np.linalg.eigh(noise_cov)
-    eigvals = np.maximum(eigvals, 1e-6)  # deal with numerical issues
+        eigvals, eigvecs = np.linalg.eigh(noise_cov)
+        eigvals = np.maximum(eigvals, 1e-6)  # deal with numerical issues
 
-    whitening_matrix = eigvecs @ np.diag(1.0 / np.sqrt(eigvals))
+        whitening_matrix = eigvecs @ np.diag(1.0 / np.sqrt(eigvals))
 
-    cube_whitened = xr.DataArray(
-        cube.values @ whitening_matrix, dims=cube.dims, coords=cube.coords
-    )
+        cube_whitened = xr.DataArray(
+            cube.values @ whitening_matrix, dims=cube.dims, coords=cube.coords
+        )
 
-    result, _ = pca(cube_whitened, n_components=n_components)
-    return result
+        # used for inverse
+        self.scalar_ = StandardScaler().fit(cube_to_features(cube_whitened))
+        self._input_coords = cube.coords
+        self._input_name = cube.name
+
+        result, pca_model = pca(cube_whitened, n_components=self.n_components)
+
+        self.whitening_matrix_ = whitening_matrix
+        self.pca_model_ = pca_model
+
+        return result.projected
+
+    def inverse_transform(self, mnf: xr.DataArray) -> xr.DataArray:
+        """Inverse transforms the MNF dataset back to the original space."""
+        if not hasattr(self, "whitening_matrix_"):
+            raise ValueError("MNF model has not been fitted yet.")
+
+        denoised = self.pca_model_.inverse_transform(cube_to_features(mnf))
+
+        denoised = self.scalar_.inverse_transform(denoised) @ np.linalg.inv(
+            self.whitening_matrix_
+        )
+
+        denoised = features_to_cube(denoised, self._input_coords, "wavelength")
+        denoised.name = self._input_name
+        for key in self._input_coords:
+            if key not in ["x", "y"]:
+                denoised[key] = self._input_coords[key]
+
+        return denoised
