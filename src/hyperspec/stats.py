@@ -138,7 +138,7 @@ class MNF:
 
     n_components: int | float | None = None
 
-    def fit_transform(self, cube: xr.DataArray) -> xr.Dataset:
+    def fit_transform(self, cube: xr.DataArray) -> xr.DataArray:
         """Fits the MNF transformation to the provided DataArray."""
         noise_cov = (
             np.cov(
