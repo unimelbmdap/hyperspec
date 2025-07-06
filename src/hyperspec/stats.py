@@ -4,7 +4,7 @@ from sklearn import decomposition as decomp
 from sklearn.preprocessing import StandardScaler
 from dataclasses import dataclass
 
-__all__ = ["pca", "cube_to_features", "features_to_cube"]
+__all__ = ["pca", "cube_to_features", "features_to_cube", "MNF"]
 
 
 def cube_to_features(cube: xr.DataArray) -> np.ndarray:
@@ -44,7 +44,7 @@ def features_to_cube(
         ValueError: If the number of dimensions in features is not 1 or 2.
     """
 
-    if isinstance(cube, xr.core.coordinates.DataArrayCoordinates):
+    if isinstance(cube, xr.core.coordinates.DataArrayCoordinates):  # type: ignore
         shape = [cube[d].size for d in cube.dims]
     else:
         shape = cube.shape
@@ -66,7 +66,9 @@ def features_to_cube(
 
 
 def pca(
-    cube: xr.DataArray, n_components: int | float | None = 3
+    cube: xr.DataArray,
+    n_components: int | float | None = 3,
+    random_state: int | None = None,
 ) -> tuple[xr.Dataset, decomp.PCA]:
     """
     Computes principal components of a cube.
@@ -90,6 +92,7 @@ def pca(
     model = decomp.PCA(
         n_components=n_components,
         svd_solver="full" if (n_components > 0) and (n_components <= 1) else "auto",
+        random_state=random_state,
     )
     model.fit_transform(X)
 
@@ -138,7 +141,9 @@ class MNF:
 
     n_components: int | float | None = None
 
-    def fit_transform(self, cube: xr.DataArray) -> xr.DataArray:
+    def fit_transform(
+        self, cube: xr.DataArray, random_state: int | None = None
+    ) -> xr.DataArray:
         """Fits the MNF transformation to the provided DataArray."""
         noise_cov = (
             np.cov(
@@ -168,7 +173,9 @@ class MNF:
         self._input_coords = cube.coords
         self._input_name = cube.name
 
-        result, pca_model = pca(cube_whitened, n_components=self.n_components)
+        result, pca_model = pca(
+            cube_whitened, n_components=self.n_components, random_state=random_state
+        )
 
         self.whitening_matrix_ = whitening_matrix
         self.pca_model_ = pca_model
