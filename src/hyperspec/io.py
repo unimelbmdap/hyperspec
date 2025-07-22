@@ -1,13 +1,20 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 import cv2
 import numpy as np
 import spectral
 import xarray as xr
+import xmltodict
 
-__all__ = ["read_cube", "read_png", "read_specim_manifest", "read_specim"]
+__all__ = [
+    "read_cube",
+    "read_png",
+    "read_specim_manifest",
+    "read_specim_metadata",
+    "read_specim",
+]
 
 
 def read_specim_manifest(path: Path | str) -> dict[str, dict[str, str]]:
@@ -44,6 +51,31 @@ def read_specim(path: Path | str, item: str) -> xr.Dataset | xr.DataArray:
     if len(data_vals) == 1:
         result = result[data_vals[0]]
 
+    return result
+
+
+def _reformat_metadata(d: dict | list) -> dict | list:
+    if isinstance(d, list):
+        for ii, v in enumerate(d):
+            d[ii] = _reformat_metadata(v)
+    elif isinstance(d, dict):
+        for k, v in d.items():
+            d[k] = _reformat_metadata(v)
+        if "@field" in d:
+            d = {d["@field"]: d["#text"]}
+    return d
+
+
+def read_specim_metadata(path: Path | str) -> dict:
+    path = Path(path)
+    if path.suffix != ".xml":
+        path = (path / "metadata").glob("*.xml").__next__()
+    result = _reformat_metadata(xmltodict.parse(path.read_text(encoding="utf-8")))
+    assert isinstance(result, dict), "Expected a dictionary from XML parsing"
+    result = result["properties"]
+    for rk, rv in result.items():
+        if isinstance(rv, dict) and "key" in rv:
+            result[rk] = {k: v for d in rv["key"] for k, v in d.items()}
     return result
 
 

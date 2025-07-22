@@ -19,6 +19,7 @@ dependencies = [
     "scikit-learn>=1.6.1",
     "spectral>=0.23.1",
     "xarray>=2025.1.2",
+    "xmltodict>=0.14.2",
 ]
 
 [dependency-groups]
