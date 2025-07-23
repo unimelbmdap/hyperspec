@@ -62,7 +62,10 @@ def _reformat_metadata(d: dict | list) -> dict | list:
         for k, v in d.items():
             d[k] = _reformat_metadata(v)
         if "@field" in d:
-            d = {d["@field"]: d["#text"]}
+            if "#text" in d:
+                d = {d["@field"]: d["#text"]}
+            else:
+                d = d["@field"]
     return d
 
 
@@ -75,7 +78,10 @@ def read_specim_metadata(path: Path | str) -> dict:
     result = result["properties"]
     for rk, rv in result.items():
         if isinstance(rv, dict) and "key" in rv:
-            result[rk] = {k: v for d in rv["key"] for k, v in d.items()}
+            if isinstance(rv["key"], list):
+                result[rk] = {k: v for d in rv["key"] for k, v in d.items()}
+            else:
+                result[rk] = rv["key"]
     return result
 
 
