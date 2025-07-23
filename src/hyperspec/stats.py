@@ -140,9 +140,10 @@ class MNF:
     """
 
     n_components: int | float | None = None
+    random_state: int | None = None
 
     def fit_transform(
-        self, cube: xr.DataArray, random_state: int | None = None
+        self, cube: xr.DataArray
     ) -> xr.DataArray:
         """Fits the MNF transformation to the provided DataArray."""
         noise_cov = (
@@ -174,7 +175,7 @@ class MNF:
         self._input_name = cube.name
 
         result, pca_model = pca(
-            cube_whitened, n_components=self.n_components, random_state=random_state
+            cube_whitened, n_components=self.n_components, random_state=self.random_state
         )
 
         self.whitening_matrix_ = whitening_matrix
