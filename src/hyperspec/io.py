@@ -1,10 +1,10 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, List
 
 import cv2
 import numpy as np
 import spectral
+import spectral.io.bilfile
 import xarray as xr
 import xmltodict
 
