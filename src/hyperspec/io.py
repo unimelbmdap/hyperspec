@@ -78,7 +78,9 @@ def read_specim_metadata(path: Path | str) -> dict:
     result = result["properties"]
     for rk, rv in result.items():
         if isinstance(rv, dict) and "key" in rv:
-            if isinstance(rv["key"], list):
+            if isinstance(rv["key"], list) and any(
+                isinstance(d, dict) for d in rv["key"]
+            ):
                 result[rk] = {k: v for d in rv["key"] for k, v in d.items()}
             else:
                 result[rk] = rv["key"]
